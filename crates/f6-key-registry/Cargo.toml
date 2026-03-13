@@ -1,0 +1,16 @@
+[package]
+name = "f6-key-registry"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+color-eyre.workspace = true
+derive_more = { workspace = true, features = ["deref", "deref_mut", "from", "into"] }
+rstest.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+tempfile.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true
