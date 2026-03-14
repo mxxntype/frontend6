@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 color-eyre.workspace = true
 f6-key-registry.workspace = true
+f6-types = { version = "0.1.0", path = "../f6-types" }
 ureq = { workspace = true, features = ["json"] }
 
 [lints]

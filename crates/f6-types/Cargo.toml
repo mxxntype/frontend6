@@ -1,0 +1,13 @@
+[package]
+name = "f6-types"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+nutype = { version = "0.6.2", features = ["regex", "serde"] }
+regex = "1.12.3"
+rstest.workspace = true
+serde.workspace = true
+
+[lints]
+workspace = true
