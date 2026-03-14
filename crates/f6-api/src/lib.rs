@@ -3,7 +3,7 @@ use f6_key_registry::fns::FnsApiKey;
 pub trait Api {
     type ApiKeyType;
 
-    fn fetch_egr(&self, api_key: Self::ApiKeyType, egr: &str) -> String;
+    fn fetch_egr(&self, api_key: Self::ApiKeyType, tin: &str) -> String;
 }
 
 pub struct FnsApi;
@@ -15,9 +15,9 @@ impl FnsApi {
 impl Api for FnsApi {
     type ApiKeyType = FnsApiKey;
 
-    fn fetch_egr(&self, api_key: Self::ApiKeyType, egr: &str) -> String {
+    fn fetch_egr(&self, api_key: Self::ApiKeyType, tin: &str) -> String {
         let uri = format!(
-            "{base_uri}?key={key}&req={egr}",
+            "{base_uri}?key={key}&req={tin}",
             base_uri = Self::FNS_API_EGR_URI,
             key = api_key,
         );
