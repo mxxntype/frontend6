@@ -26,6 +26,12 @@ impl FromStr for FnsApiKey {
     }
 }
 
+impl std::fmt::Display for FnsApiKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 #[derive(thiserror::Error, Debug)]
 pub enum FnsApiKeyParseError {
     #[error("The FNS key string must be {KEY_LENGTH_CHARS} chars long, but got {0}")]
