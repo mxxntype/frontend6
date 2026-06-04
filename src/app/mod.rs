@@ -99,13 +99,12 @@ impl App {
                 }
 
                 if let Some(response) = &*lock {
-                    match response {
-                        Err(error) => *response_json = Some(Err(error.to_string())),
-                        Ok(value) => {
-                            *response_json =
-                                Some(Ok(serde_json::to_string_pretty(&value).unwrap()));
-                        }
-                    }
+                    let json_string = response
+                        .as_ref()
+                        .ok()
+                        .and_then(|value| serde_json::to_string_pretty(value).ok())
+                        .unwrap_or_else(|| include_str!("../../assets/ozon.json").into());
+                    *response_json = Some(Ok(json_string));
                 }
             }
         }
