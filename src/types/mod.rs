@@ -3,24 +3,14 @@ use nutype::nutype;
 #[nutype(
     validate(greater_or_equal = 1_000_000_000, less_or_equal = 9_999_999_999),
     derive(
-        Serialize,
-        Deserialize,
-        Hash,
-        Display,
-        PartialEq,
-        Eq,
-        PartialOrd,
-        Ord,
-        Hash,
-        FromStr,
-        Deref,
+        Hash, Display, PartialEq, Eq, PartialOrd, Ord, Hash, FromStr, Deref, Clone, Copy, Debug,
     )
 )]
 pub struct LegalEntityTIN(u64);
 
 #[cfg(test)]
 mod tests {
-    use crate::LegalEntityTIN;
+    use super::LegalEntityTIN;
 
     #[rstest::rstest]
     #[case::valid_redsoft(9_705_000_373, true)]

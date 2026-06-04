@@ -1,5 +1,6 @@
 [toolchain]
 channel = "nightly-2026-05-30"
+targets = ["wasm32-unknown-unknown"]
 components = [
     "cargo",
     "clippy",

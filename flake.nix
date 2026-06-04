@@ -1,11 +1,16 @@
 {
   description = "";
 
-  inputs.nixpkgs.url = "https://flakehub.com/f/NixOS/nixpkgs/0";
+  inputs = {
+    nixpkgs.url = "https://flakehub.com/f/NixOS/nixpkgs/0";
+    rust-overlay.url = "github:oxalica/rust-overlay";
+  };
 
   outputs =
     { self, ... }@inputs:
     let
+      inherit (inputs.nixpkgs) lib;
+
       supportedSystems = [ "x86_64-linux" ];
 
       forEachSupportedSystem =
@@ -16,6 +21,7 @@
             inherit system;
             pkgs = import inputs.nixpkgs {
               inherit system;
+              overlays = [ (import inputs.rust-overlay) ];
               config.allowUnfree = true;
             };
           }
@@ -26,10 +32,37 @@
       devShells = forEachSupportedSystem (
         { pkgs, system }:
         {
-          default = pkgs.mkShellNoCC {
-            packages = [
+          default = pkgs.mkShell rec {
+            buildInputs = with pkgs; [
+              (rust-bin.stable.latest.default.override {
+                extensions = [ "rust-analyzer" ];
+                targets = [ "wasm32-unknown-unknown" ];
+              })
+
+              udev
+              alsa-lib
+              vulkan-loader
+              libGL
+              gtk3
+              libx11
+              libxcursor
+              libxi
+              libxrandr
+              libxkbcommon
+              wayland
+              pkg-config
+              openssl.dev
+              fontconfig
+              nasm
+              perl
+              cmake
+              trunk
+
               self.formatter.${system}
             ];
+
+            LD_LIBRARY_PATH = lib.makeLibraryPath buildInputs;
+            RUST_SRC_PATH = "${pkgs.rust.packages.stable.rustPlatform.rustLibSrc}";
 
             env = { };
             shellHook = "";
