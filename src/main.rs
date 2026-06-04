@@ -2,12 +2,16 @@
 
 #[cfg(not(target_arch = "wasm32"))]
 #[tokio::main]
-async fn main() -> eframe::Result {
+async fn main() -> Result<(), color_eyre::eyre::Report> {
+    color_eyre::install()?;
+
     eframe::run_native(
         "frontend6",
         eframe::NativeOptions::default(),
         Box::new(|_cc| Ok(Box::new(frontend6::app::App::default()))),
-    )
+    )?;
+
+    Ok(())
 }
 
 #[cfg(target_arch = "wasm32")]
