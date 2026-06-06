@@ -81,7 +81,7 @@ impl App {
     fn sanitize_tin_input(tin_string: &mut String) {
         let sanitized = tin_string
             .chars()
-            .filter(|ch| ch.is_ascii_digit())
+            .filter(char::is_ascii_digit)
             .take(12)
             .collect::<String>();
 
@@ -170,6 +170,7 @@ impl App {
         }
     }
 
+    #[expect(clippy::too_many_lines)]
     pub fn main_ui(&mut self, ui: &mut egui::Ui) {
         Self::apply_theme(ui);
 
@@ -278,7 +279,7 @@ impl App {
                                             .inner
                                             .clicked();
 
-                                        *clicked = (clicked_now && is_valid) || (enter_pressed && is_valid);
+                                        *clicked = is_valid && (clicked_now || enter_pressed);
                                     }
 
                                     ui.add_space(6.0);
@@ -346,47 +347,31 @@ impl App {
 
                             ui.add_space(20.0);
 
-                            if let Some(report) = report {
+                            if let Some(TINReport {
+                                tin: _,
+                                name,
+                                domains,
+                                ip_addrs,
+                            }) = report
+                            {
                                 ui.label(
-                                    RichText::new(format!("TIN:      {}", report.tin))
+                                    RichText::new(format!("Название: {name}"))
                                         .monospace()
                                         .color(PRIMARY_TEXT),
                                 );
                                 ui.label(
-                                    RichText::new(format!("name:     {}", report.name))
-                                        .monospace()
-                                        .color(PRIMARY_TEXT),
-                                );
-                                ui.label(
-                                    RichText::new(format!("domains:  {:?}", report.domains))
+                                    RichText::new(format!("Домены и поддомены: {domains:?}"))
                                         .monospace()
                                         .color(MUTED_TEXT),
                                 );
                                 ui.label(
-                                    RichText::new(format!("ip_addrs: {:?}", report.ip_addrs))
+                                    RichText::new(format!("IP-адреса: {ip_addrs:?}"))
                                         .monospace()
                                         .color(MUTED_TEXT),
                                 );
                             }
                         });
                 });
-
-                if let Some(report) = report {
-                    ui.strong(RichText::from(&report.name).size(body_text_size + 8.0));
-                    ScrollArea::vertical().show(ui, |ui| {
-                        ui.strong("Обнаруженные домены и поддомены:");
-                        for domain in &report.domains {
-                            ui.monospace(domain);
-                        }
-
-                        ui.strong("IP-адреса");
-                        for ip_addr in &report.ip_addrs {
-                            ui.monospace(ip_addr.to_string());
-                        }
-
-                        ui.allocate_space(egui::vec2(ui.available_width(), 0.0));
-                    });
-                }
             }
         }
     }
