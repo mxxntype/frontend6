@@ -11,9 +11,11 @@ f6-types.workspace = true
 hickory-resolver.workspace = true
 icann-rdap-client.workspace = true
 icann-rdap-common.workspace = true
+itertools = "0.14.0"
 reqwest = { workspace = true, features = ["json"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+tempfile = "3.27.0"
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal", "fs"] }
 tokio-util.workspace = true

@@ -28,7 +28,7 @@ pub struct EgrResponseLegalEntity {
 #[must_use]
 pub struct EgrResponseContacts {
     #[serde(rename = "Сайт")]
-    pub sites: Vec<String>,
+    pub domains: Vec<String>,
     #[serde(rename = "Телефон")]
     pub cellphones: Vec<String>,
     #[serde(rename = "e-mail")]

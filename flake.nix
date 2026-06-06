@@ -59,6 +59,12 @@
               trunk
               whois
 
+              (python3.withPackages (python-pkgs: with python-pkgs; [
+                argparse
+                dnspython
+                requests
+              ]))
+
               self.formatter.${system}
             ];
 

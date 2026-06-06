@@ -1,7 +1,8 @@
 use std::sync::Mutex;
 
-use egui::{Align, Layout, RichText, TextEdit, TextStyle};
-use f6_types::{LegalEntityTIN, report::TINReport};
+use egui::{Align, Layout, RichText, ScrollArea, TextEdit, TextStyle};
+use f6_types::LegalEntityTIN;
+use f6_types::report::TINReport;
 
 #[derive(Debug)]
 #[must_use]
@@ -166,10 +167,20 @@ impl App {
                 });
 
                 if let Some(report) = report {
-                    ui.monospace(format!("TIN:      {}", report.tin));
-                    ui.monospace(format!("name:     {}", report.name));
-                    ui.monospace(format!("domains:  {:?}", report.domains));
-                    ui.monospace(format!("ip_addrs: {:?}", report.ip_addrs));
+                    ui.strong(RichText::from(&report.name).size(body_text_size + 8.0));
+                    ScrollArea::vertical().show(ui, |ui| {
+                        ui.strong("Обнаруженные домены и поддомены:");
+                        for domain in &report.domains {
+                            ui.monospace(domain);
+                        }
+
+                        ui.strong("IP-адреса");
+                        for ip_addr in &report.ip_addrs {
+                            ui.monospace(ip_addr.to_string());
+                        }
+
+                        ui.allocate_space(egui::vec2(ui.available_width(), 0.0));
+                    });
                 }
             }
         }
