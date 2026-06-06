@@ -11,6 +11,8 @@ const CARD_BACKGROUND: Color32 = Color32::from_rgb(24, 24, 24);
 const INPUT_BACKGROUND: Color32 = Color32::from_rgb(36, 36, 36);
 const BORDER_COLOR: Color32 = Color32::from_rgb(46, 46, 46);
 const SUBTLE_PANEL: Color32 = Color32::from_rgb(20, 20, 20);
+const CHIP_BACKGROUND: Color32 = Color32::from_rgb(30, 30, 30);
+const CHIP_BORDER: Color32 = Color32::from_rgb(58, 58, 58);
 const PRIMARY_TEXT: Color32 = Color32::from_rgb(245, 245, 245);
 const MUTED_TEXT: Color32 = Color32::from_rgb(168, 168, 168);
 const BUTTON_TEXT: Color32 = Color32::from_rgb(12, 12, 12);
@@ -98,6 +100,7 @@ impl App {
     fn data_section<R>(
         ui: &mut egui::Ui,
         title: &str,
+        count: usize,
         add_contents: impl FnOnce(&mut egui::Ui) -> R,
     ) {
         Frame::new()
@@ -106,28 +109,65 @@ impl App {
             .corner_radius(CornerRadius::same(16))
             .inner_margin(Margin::same(18))
             .show(ui, |ui| {
-                ui.label(
-                    RichText::new(title)
-                        .size(ui.text_style_height(&TextStyle::Body) - 1.0)
-                        .color(MUTED_TEXT)
-                        .strong(),
-                );
+                ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new(title)
+                            .size(ui.text_style_height(&TextStyle::Body) - 1.0)
+                            .color(MUTED_TEXT)
+                            .strong(),
+                    );
+                    ui.label(
+                        RichText::new(count.to_string())
+                            .size(ui.text_style_height(&TextStyle::Body) - 2.0)
+                            .color(MUTED_TEXT),
+                    );
+                });
                 ui.add_space(10.0);
                 add_contents(ui)
             });
     }
 
-    fn bullet_list(ui: &mut egui::Ui, items: &[String], empty_label: &str) {
+    fn domain_chips(ui: &mut egui::Ui, items: &[String], empty_label: &str) {
         if items.is_empty() {
             ui.label(RichText::new(empty_label).color(MUTED_TEXT));
             return;
         }
 
-        for item in items {
-            ui.horizontal(|ui| {
-                ui.label(RichText::new("•").color(MUTED_TEXT));
-                ui.label(RichText::new(item).color(PRIMARY_TEXT));
-            });
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = Vec2::new(8.0, 8.0);
+
+            for item in items {
+                Frame::new()
+                    .fill(CHIP_BACKGROUND)
+                    .stroke(Stroke::new(1.0, CHIP_BORDER))
+                    .corner_radius(CornerRadius::same(255))
+                    .inner_margin(Margin::symmetric(12, 8))
+                    .show(ui, |ui| {
+                        ui.label(RichText::new(item).color(PRIMARY_TEXT));
+                    });
+            }
+        });
+    }
+
+    fn ip_list(ui: &mut egui::Ui, items: &[String], empty_label: &str) {
+        if items.is_empty() {
+            ui.label(RichText::new(empty_label).color(MUTED_TEXT));
+            return;
+        }
+
+        for (index, item) in items.iter().enumerate() {
+            Frame::new()
+                .fill(CARD_BACKGROUND)
+                .stroke(Stroke::new(1.0, BORDER_COLOR))
+                .corner_radius(CornerRadius::same(12))
+                .inner_margin(Margin::symmetric(14, 12))
+                .show(ui, |ui| {
+                    ui.label(RichText::new(item).color(PRIMARY_TEXT).monospace());
+                });
+
+            if index + 1 != items.len() {
+                ui.add_space(8.0);
+            }
         }
     }
 
@@ -362,23 +402,17 @@ impl App {
                             ui.horizontal(|ui| {
                                 if report.is_none() {
                                     ui.spinner();
-                                }
-
-                                ui.label(
-                                    RichText::new(format!("Поиск по ИНН: {tin}"))
-                                        .size(body_text_size + 4.0)
-                                        .strong(),
-                                );
-
-                                if report.is_some() {
-                                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                                        *back_clicked = ui
-                                            .add(
-                                                Button::new(RichText::new("Назад").strong())
-                                                    .corner_radius(CornerRadius::same(10)),
-                                            )
-                                            .clicked();
-                                    });
+                                    ui.label(
+                                        RichText::new(format!("Ищем инфраструктуру по ИНН {tin}"))
+                                            .size(body_text_size)
+                                            .color(MUTED_TEXT),
+                                    );
+                                } else {
+                                    ui.label(
+                                        RichText::new(format!("Отчёт по ИНН {tin}"))
+                                            .size(body_text_size)
+                                            .color(MUTED_TEXT),
+                                    );
                                 }
                             });
 
@@ -399,28 +433,87 @@ impl App {
                                 ip_list.sort_unstable();
 
                                 ui.vertical(|ui| {
-                                    Self::data_section(ui, "Компания", |ui| {
-                                        ui.label(
-                                            RichText::new(name.as_str())
-                                                .size(body_text_size + 6.0)
-                                                .strong()
-                                                .color(PRIMARY_TEXT),
-                                        );
-                                        ui.add_space(4.0);
-                                        ui.label(
-                                            RichText::new(format!("ИНН {tin}"))
-                                                .size(body_text_size)
-                                                .color(MUTED_TEXT),
-                                        );
+                                    ui.horizontal(|ui| {
+                                        ui.vertical(|ui| {
+                                            ui.label(
+                                                RichText::new(name.as_str())
+                                                    .size(body_text_size + 14.0)
+                                                    .strong()
+                                                    .color(PRIMARY_TEXT),
+                                            );
+                                            ui.add_space(4.0);
+                                            ui.label(
+                                                RichText::new(format!("ИНН {tin}"))
+                                                    .size(body_text_size + 1.0)
+                                                    .color(MUTED_TEXT),
+                                            );
+                                        });
+
+                                        ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
+                                            *back_clicked = ui
+                                                .add(
+                                                    Button::new(RichText::new("Назад").strong())
+                                                        .corner_radius(CornerRadius::same(10)),
+                                                )
+                                                .clicked();
+                                        });
                                     });
 
-                                    Self::data_section(ui, "Домены", |ui| {
-                                        Self::bullet_list(ui, &domain_list, "Домены не найдены");
-                                    });
+                                    ui.add_space(24.0);
 
-                                    Self::data_section(ui, "IP-адреса", |ui| {
-                                        Self::bullet_list(ui, &ip_list, "IP-адреса не найдены");
-                                    });
+                                    let wide_layout = ui.available_width() >= 760.0;
+
+                                    if wide_layout {
+                                        ui.columns(2, |columns| {
+                                            Self::data_section(
+                                                &mut columns[0],
+                                                "Домены",
+                                                domain_list.len(),
+                                                |ui| {
+                                                    Self::domain_chips(
+                                                        ui,
+                                                        &domain_list,
+                                                        "Домены не найдены",
+                                                    );
+                                                },
+                                            );
+
+                                            Self::data_section(
+                                                &mut columns[1],
+                                                "IP-адреса",
+                                                ip_list.len(),
+                                                |ui| {
+                                                    Self::ip_list(
+                                                        ui,
+                                                        &ip_list,
+                                                        "IP-адреса не найдены",
+                                                    );
+                                                },
+                                            );
+                                        });
+                                    } else {
+                                        Self::data_section(
+                                            ui,
+                                            "Домены",
+                                            domain_list.len(),
+                                            |ui| {
+                                                Self::domain_chips(
+                                                    ui,
+                                                    &domain_list,
+                                                    "Домены не найдены",
+                                                );
+                                            },
+                                        );
+
+                                        Self::data_section(
+                                            ui,
+                                            "IP-адреса",
+                                            ip_list.len(),
+                                            |ui| {
+                                                Self::ip_list(ui, &ip_list, "IP-адреса не найдены");
+                                            },
+                                        );
+                                    }
                                 });
                             }
                         });
