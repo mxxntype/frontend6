@@ -57,11 +57,24 @@ pub async fn run(settings: Settings) -> Result<(), ServerError> {
 }
 
 pub fn router() -> std::io::Result<Router> {
+    const PATH: &str = "fns_api_key.txt";
+
+    let Some(fns_api_key) = std::fs::read_to_string(PATH).ok() else {
+        let key_path = std::env::current_dir().unwrap().join(PATH);
+        tracing::error!("Please put your FNS-API key in {}", key_path.display());
+        std::process::exit(1);
+    };
+
     let egr_cache = Arc::new(Mutex::new(Cache::new(&PathBuf::from(cache::SUBDIR_EGR))?));
-    let state = ServerState { egr_cache };
+
+    let state = ServerState {
+        fns_api_key: fns_api_key.trim().to_owned(),
+        egr_cache,
+    };
+
     let router = Router::new()
-        .route("/egr/{tin}", get(read_egr))
-        .route("/report/{tin}", get(build_report))
+        .route("/egr/{tin}", get(endpoint_egr))
+        .route("/report/{tin}", get(endpoint_report))
         .route("/", get(|| async { "Hello, World!" }))
         .with_state(state);
 
@@ -70,7 +83,7 @@ pub fn router() -> std::io::Result<Router> {
 
 #[tracing::instrument(skip_all)]
 #[axum::debug_handler]
-async fn read_egr(
+async fn endpoint_egr(
     State(state): State<ServerState>,
     Path(tin): Path<LegalEntityTIN>,
 ) -> Result<Json<EgrResponse>, StatusCode> {
@@ -85,34 +98,37 @@ async fn read_egr(
         return Ok(Json(egr));
     }
 
-    // TODO: Query FNS-API for EGR of this TIN.
-    tracing::warn!("EGR for this TIN has not been cached, cannot return anything");
+    tracing::warn!("EGR for this TIN has not been cached, querying FNS-API");
 
-    Err(StatusCode::NO_CONTENT)
+    let egr = self::fns_api::fetch_egr(&state.fns_api_key, tin)
+        .await
+        .inspect_err(|error| tracing::error!(?error, "Failed to query FNS-API for EGR"))
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    state
+        .egr_cache
+        .lock()
+        .await
+        .persist(&tin, &egr)
+        .await
+        .unwrap();
+
+    Ok(Json(egr))
 }
 
 #[tracing::instrument(skip_all)]
 #[axum::debug_handler]
-async fn build_report(
+async fn endpoint_report(
     State(state): State<ServerState>,
     Path(tin): Path<LegalEntityTIN>,
 ) -> Result<Json<TINReport>, StatusCode> {
-    if let Some(egr) = state
-        .egr_cache
-        .lock()
+    let Json(egr) = self::endpoint_egr(State(state), Path(tin))
         .await
-        .retrieve(&tin)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    {
-        let report = self::report::build(tin, egr.items[0].clone()).await;
-        return Ok(Json(report));
-    }
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // TODO: Query FNS-API for EGR of this TIN.
-    tracing::warn!("EGR for this TIN has not been cached, cannot return anything");
+    let report = self::report::build(tin, egr.items[0].clone()).await;
 
-    Err(StatusCode::NO_CONTENT)
+    Ok(Json(report))
 }
 
 #[derive(thiserror::Error, Debug)]

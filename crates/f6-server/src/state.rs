@@ -8,5 +8,6 @@ use crate::cache::Cache;
 #[derive(Clone)]
 #[must_use]
 pub struct ServerState {
+    pub fns_api_key: String,
     pub egr_cache: Arc<AsyncMutex<Cache<LegalEntityTIN, EgrResponse>>>,
 }
