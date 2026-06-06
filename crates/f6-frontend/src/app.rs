@@ -1,16 +1,7 @@
-use egui::{RichText, ScrollArea, TextEdit, TextStyle};
-use std::str::FromStr;
 use std::sync::Mutex;
-use std::time::Duration;
 
-use crate::api::Api;
-use crate::api::fns::FnsApi;
-use crate::key_registry::fns::FnsApiKey;
-use crate::types::LegalEntityTIN;
-
-pub const APP_NAME: &str = env!("CARGO_CRATE_NAME");
-
-static RESPONSE_BUFFER: Mutex<Option<Result<serde_json::Value, reqwest::Error>>> = Mutex::new(None);
+use egui::{Align, Layout, RichText, TextEdit, TextStyle};
+use f6_types::{LegalEntityTIN, report::TINReport};
 
 #[derive(Debug)]
 #[must_use]
@@ -23,10 +14,13 @@ pub enum App {
 
     Query {
         tin: LegalEntityTIN,
-        fns_api_key: FnsApiKey,
-        response_json: Option<Result<String, String>>,
+        report: Option<TINReport>,
+        report_queried: bool,
+        back_clicked: bool,
     },
 }
+
+static REPORT_BUFFER: Mutex<Option<TINReport>> = Mutex::new(None);
 
 impl Default for App {
     fn default() -> Self {
@@ -54,14 +48,12 @@ impl App {
                         .ok()
                         .and_then(|n| LegalEntityTIN::try_new(n).ok())
                     {
-                        Some(parsed_tin) if *clicked => {
+                        Some(tin) if *clicked => {
                             *self = Self::Query {
-                                tin: parsed_tin,
-                                fns_api_key: FnsApiKey::from_str(
-                                    "d720bff6d7647a52f1db847e4760ee823af5e57d",
-                                )
-                                .unwrap(),
-                                response_json: None,
+                                tin,
+                                report: None,
+                                report_queried: false,
+                                back_clicked: false,
                             }
                         }
                         Some(_) => *error_string = None,
@@ -72,39 +64,44 @@ impl App {
 
             Self::Query {
                 tin,
-                fns_api_key,
-                response_json,
+                report,
+                report_queried,
+                back_clicked,
             } => {
-                let api_key = fns_api_key.clone();
-                let tin = *tin;
+                if !*report_queried {
+                    debug_assert!(report.is_none());
+                    debug_assert!(REPORT_BUFFER.lock().unwrap().is_none());
 
-                let lock = RESPONSE_BUFFER.lock().unwrap();
+                    let tin = *tin;
+                    let future = async move {
+                        let report = reqwest::get(format!("http://localhost:8080/report/{tin}"))
+                            .await
+                            .unwrap()
+                            .json()
+                            .await
+                            .unwrap();
+                        *REPORT_BUFFER.lock().unwrap() = Some(report);
 
-                if lock.is_none() {
+                        #[cfg(not(target_arch = "wasm32"))]
+                        tracing::debug!("Wrote response to report buffer");
+                    };
+
                     cfg_select! {
-                        not(target_arch = "wasm32") => {
-                            tokio::task::spawn(async move {
-                                let json_value = FnsApi.fetch_egr(api_key, tin).await;
-                                *RESPONSE_BUFFER.lock().unwrap() = Some(json_value);
-                            });
-                        }
-
-                        target_arch = "wasm32" => {
-                            wasm_bindgen_futures::spawn_local(async move {
-                                let json_value = FnsApi.fetch_egr(api_key, tin).await;
-                                *RESPONSE_BUFFER.lock().unwrap() = Some(json_value);
-                            });
-                        }
+                        not(target_arch = "wasm32") => { tokio::task::spawn(future); }
+                        target_arch = "wasm32" => { wasm_bindgen_futures::spawn_local(future); }
                     }
+
+                    *report_queried = true;
                 }
 
-                if let Some(response) = &*lock {
-                    let json_string = response
-                        .as_ref()
-                        .ok()
-                        .and_then(|value| serde_json::to_string_pretty(value).ok())
-                        .unwrap_or_else(|| include_str!("../../assets/ozon.json").into());
-                    *response_json = Some(Ok(json_string));
+                let mut lock = REPORT_BUFFER.lock().unwrap();
+                if lock.is_some() {
+                    *report = lock.take();
+                }
+                drop(lock);
+
+                if *back_clicked {
+                    *self = Self::default();
                 }
             }
         }
@@ -149,29 +146,30 @@ impl App {
             }
 
             Self::Query {
-                response_json, tin, ..
+                tin,
+                report,
+                report_queried: _,
+                back_clicked,
             } => {
-                ui.strong(format!("Поиск по ИНН: {tin}"));
+                ui.horizontal(|ui| {
+                    if report.is_none() {
+                        ui.spinner();
+                    }
 
-                match response_json {
-                    Some(Ok(response_json)) => {
-                        ScrollArea::vertical().show(ui, |ui| {
-                            let response_text_field = TextEdit::multiline(response_json)
-                                .interactive(false)
-                                .code_editor()
-                                .desired_width(f32::INFINITY);
-                            ui.add(response_text_field);
+                    ui.strong(format!("Поиск по ИНН: {tin}"));
+
+                    if report.is_some() {
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            *back_clicked = ui.button("Назад").clicked();
                         });
                     }
+                });
 
-                    Some(Err(error)) => {
-                        ui.colored_label(ui.visuals().error_fg_color, error);
-                    }
-
-                    None => {
-                        ui.weak("Поиск в FNS API...");
-                        ui.request_repaint_after(Duration::from_secs(1));
-                    }
+                if let Some(report) = report {
+                    ui.monospace(format!("TIN:      {}", report.tin));
+                    ui.monospace(format!("name:     {}", report.name));
+                    ui.monospace(format!("domains:  {:?}", report.domains));
+                    ui.monospace(format!("ip_addrs: {:?}", report.ip_addrs));
                 }
             }
         }

@@ -1,9 +1,27 @@
 use nutype::nutype;
 
+pub mod fns;
+pub mod report;
+
 #[nutype(
     validate(greater_or_equal = 1_000_000_000, less_or_equal = 9_999_999_999),
     derive(
-        Hash, Display, PartialEq, Eq, PartialOrd, Ord, Hash, FromStr, Deref, Clone, Copy, Debug,
+        Hash,
+        Display,
+        PartialEq,
+        Eq,
+        PartialOrd,
+        Ord,
+        Hash,
+        FromStr,
+        Deref,
+        AsRef,
+        Into,
+        Clone,
+        Copy,
+        Debug,
+        Serialize,
+        Deserialize,
     )
 )]
 pub struct LegalEntityTIN(u64);

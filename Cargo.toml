@@ -1,12 +1,11 @@
-[package]
-name = "frontend6"
-version = "0.1.0"
-edition = "2024"
+[workspace]
+resolver = "2"
+members = ["crates/*"]
 
-[lints.rust]
+[workspace.lints.rust]
 unsafe_code = "forbid"
 
-[lints.clippy]
+[workspace.lints.clippy]
 correctness = "warn"
 suspicious = "warn"
 style = "warn"
@@ -20,29 +19,24 @@ match_bool = { level = "allow", priority = 1 }
 missing_errors_doc = { level = "allow", priority = 1 }
 missing_panics_doc = { level = "allow", priority = 1 }
 
-[dependencies]
-thiserror = "2.0.18"
-derive_more = { version = "2.1.1", features = ["full"] }
-rstest = "0.26.1"
-serde = { version = "1.0.228", features = ["derive"] }
+[workspace.dependencies]
+axum = "0.8.9"
+clap = "4.6.1"
 color-eyre = "0.6.5"
-serde_json = "1.0.149"
-tempfile = "3.27.0"
-nutype = { version = "0.7.0", features = ["serde"] }
-egui = "0.34.3"
 eframe = "0.34.3"
-getrandom = { version = "0.2.17", features = ["js"] }
-reqwest = { version = "0.13.4", features = ["json", "blocking"] }
-wasm-bindgen-futures = "0.4.50"
-
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-wasm-bindgen-futures = "0.4.50"
-web-sys = "0.3.70"
-
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-tokio = { version = "1.52.3", features = [
-    "rt-multi-thread",
-    "macros",
-    "signal",
-    "time",
-] }
+egui = "0.34.3"
+f6-types = { version = "0.1.0", path = "crates/f6-types" }
+hickory-resolver = "0.26.1"
+icann-rdap-client = "0.0.29"
+icann-rdap-common = "0.0.29"
+nutype = "0.7.0"
+reqwest = "0.13.4"
+rstest = "0.26.1"
+serde = "1.0.228"
+serde_json = "1.0.150"
+thiserror = "2.0.18"
+tokio = "1.52.3"
+tokio-util = "0.7.18"
+tracing = "0.1.44"
+tracing-error = "0.2.1"
+tracing-subscriber = "0.3.23"

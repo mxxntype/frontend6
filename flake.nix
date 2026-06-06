@@ -57,6 +57,7 @@
               perl
               cmake
               trunk
+              whois
 
               self.formatter.${system}
             ];

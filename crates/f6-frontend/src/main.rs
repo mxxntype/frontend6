@@ -1,14 +1,16 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+mod app;
 
 #[cfg(not(target_arch = "wasm32"))]
 #[tokio::main]
 async fn main() -> Result<(), color_eyre::eyre::Report> {
-    color_eyre::install()?;
+    setup_diagnostics()?;
 
     eframe::run_native(
-        "frontend6",
+        env!("CARGO_CRATE_NAME"),
         eframe::NativeOptions::default(),
-        Box::new(|_cc| Ok(Box::new(frontend6::app::App::default()))),
+        Box::new(|_cc| Ok(Box::new(crate::app::App::default()))),
     )?;
 
     Ok(())
@@ -36,7 +38,7 @@ fn main() {
             .start(
                 canvas,
                 web_options,
-                Box::new(|_cc| Ok(Box::new(frontend6::app::App::default()))),
+                Box::new(|_cc| Ok(Box::new(crate::app::App::default()))),
             )
             .await;
 
@@ -55,4 +57,24 @@ fn main() {
             }
         }
     });
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn setup_diagnostics() -> Result<(), color_eyre::eyre::Report> {
+    use tracing_error::ErrorLayer;
+    use tracing_subscriber::prelude::*;
+    use tracing_subscriber::{EnvFilter, fmt};
+
+    color_eyre::install()?;
+
+    let filter_layer = EnvFilter::try_from_default_env().or_else(|_| EnvFilter::try_new("info"))?;
+    let format_layer = fmt::layer().without_time().with_writer(std::io::stderr);
+
+    tracing_subscriber::registry()
+        .with(filter_layer)
+        .with(format_layer)
+        .with(ErrorLayer::default())
+        .try_init()?;
+
+    Ok(())
 }
