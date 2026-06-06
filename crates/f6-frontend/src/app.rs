@@ -10,6 +10,7 @@ const PAGE_BACKGROUND: Color32 = Color32::from_rgb(15, 15, 15);
 const CARD_BACKGROUND: Color32 = Color32::from_rgb(24, 24, 24);
 const INPUT_BACKGROUND: Color32 = Color32::from_rgb(36, 36, 36);
 const BORDER_COLOR: Color32 = Color32::from_rgb(46, 46, 46);
+const SUBTLE_PANEL: Color32 = Color32::from_rgb(20, 20, 20);
 const PRIMARY_TEXT: Color32 = Color32::from_rgb(245, 245, 245);
 const MUTED_TEXT: Color32 = Color32::from_rgb(168, 168, 168);
 const BUTTON_TEXT: Color32 = Color32::from_rgb(12, 12, 12);
@@ -92,6 +93,42 @@ impl App {
 
     fn is_valid_tin_input(tin_string: &str) -> bool {
         matches!(tin_string.len(), 10 | 12) && tin_string.chars().all(|ch| ch.is_ascii_digit())
+    }
+
+    fn data_section<R>(
+        ui: &mut egui::Ui,
+        title: &str,
+        add_contents: impl FnOnce(&mut egui::Ui) -> R,
+    ) {
+        Frame::new()
+            .fill(SUBTLE_PANEL)
+            .stroke(Stroke::new(1.0, BORDER_COLOR))
+            .corner_radius(CornerRadius::same(16))
+            .inner_margin(Margin::same(18))
+            .show(ui, |ui| {
+                ui.label(
+                    RichText::new(title)
+                        .size(ui.text_style_height(&TextStyle::Body) - 1.0)
+                        .color(MUTED_TEXT)
+                        .strong(),
+                );
+                ui.add_space(10.0);
+                add_contents(ui)
+            });
+    }
+
+    fn bullet_list(ui: &mut egui::Ui, items: &[String], empty_label: &str) {
+        if items.is_empty() {
+            ui.label(RichText::new(empty_label).color(MUTED_TEXT));
+            return;
+        }
+
+        for item in items {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("•").color(MUTED_TEXT));
+                ui.label(RichText::new(item).color(PRIMARY_TEXT));
+            });
+        }
     }
 
     pub fn advance(&mut self) {
@@ -354,21 +391,37 @@ impl App {
                                 ip_addrs,
                             }) = report
                             {
-                                ui.label(
-                                    RichText::new(format!("Название: {name}"))
-                                        .monospace()
-                                        .color(PRIMARY_TEXT),
-                                );
-                                ui.label(
-                                    RichText::new(format!("Домены и поддомены: {domains:?}"))
-                                        .monospace()
-                                        .color(MUTED_TEXT),
-                                );
-                                ui.label(
-                                    RichText::new(format!("IP-адреса: {ip_addrs:?}"))
-                                        .monospace()
-                                        .color(MUTED_TEXT),
-                                );
+                                let mut domain_list = domains.iter().cloned().collect::<Vec<_>>();
+                                domain_list.sort_unstable();
+
+                                let mut ip_list =
+                                    ip_addrs.iter().map(ToString::to_string).collect::<Vec<_>>();
+                                ip_list.sort_unstable();
+
+                                ui.vertical(|ui| {
+                                    Self::data_section(ui, "Компания", |ui| {
+                                        ui.label(
+                                            RichText::new(name.as_str())
+                                                .size(body_text_size + 6.0)
+                                                .strong()
+                                                .color(PRIMARY_TEXT),
+                                        );
+                                        ui.add_space(4.0);
+                                        ui.label(
+                                            RichText::new(format!("ИНН {tin}"))
+                                                .size(body_text_size)
+                                                .color(MUTED_TEXT),
+                                        );
+                                    });
+
+                                    Self::data_section(ui, "Домены", |ui| {
+                                        Self::bullet_list(ui, &domain_list, "Домены не найдены");
+                                    });
+
+                                    Self::data_section(ui, "IP-адреса", |ui| {
+                                        Self::bullet_list(ui, &ip_list, "IP-адреса не найдены");
+                                    });
+                                });
                             }
                         });
                 });
