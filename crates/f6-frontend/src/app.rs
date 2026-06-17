@@ -1,8 +1,24 @@
 use std::sync::Mutex;
 
-use egui::{Align, Layout, RichText, ScrollArea, TextEdit, TextStyle};
-use f6_types::LegalEntityTIN;
-use f6_types::report::TINReport;
+use egui::{
+    Align, Button, Color32, CornerRadius, Frame, Key, Layout, Margin, RichText, Stroke, TextEdit,
+    TextStyle, Vec2,
+};
+use f6_types::{LegalEntityTIN, report::TINReport};
+
+const PAGE_BACKGROUND: Color32 = Color32::from_rgb(15, 15, 15);
+const CARD_BACKGROUND: Color32 = Color32::from_rgb(24, 24, 24);
+const INPUT_BACKGROUND: Color32 = Color32::from_rgb(36, 36, 36);
+const BORDER_COLOR: Color32 = Color32::from_rgb(46, 46, 46);
+const SUBTLE_PANEL: Color32 = Color32::from_rgb(20, 20, 20);
+const CHIP_BACKGROUND: Color32 = Color32::from_rgb(30, 30, 30);
+const CHIP_BORDER: Color32 = Color32::from_rgb(58, 58, 58);
+const PRIMARY_TEXT: Color32 = Color32::from_rgb(245, 245, 245);
+const MUTED_TEXT: Color32 = Color32::from_rgb(168, 168, 168);
+const BUTTON_TEXT: Color32 = Color32::from_rgb(12, 12, 12);
+const BUTTON_BACKGROUND: Color32 = Color32::from_rgb(250, 250, 250);
+const BUTTON_BACKGROUND_DISABLED: Color32 = Color32::from_rgb(92, 92, 92);
+const ERROR_TEXT: Color32 = Color32::from_rgb(255, 126, 126);
 
 #[derive(Debug)]
 #[must_use]
@@ -34,6 +50,127 @@ impl Default for App {
 }
 
 impl App {
+    fn apply_theme(ui: &mut egui::Ui) {
+        let visuals = ui.visuals_mut();
+        visuals.override_text_color = Some(PRIMARY_TEXT);
+        visuals.panel_fill = PAGE_BACKGROUND;
+        visuals.extreme_bg_color = INPUT_BACKGROUND;
+        visuals.faint_bg_color = CARD_BACKGROUND;
+        visuals.code_bg_color = INPUT_BACKGROUND;
+        visuals.window_fill = CARD_BACKGROUND;
+        visuals.widgets.noninteractive.bg_fill = CARD_BACKGROUND;
+        visuals.widgets.noninteractive.bg_stroke = Stroke::new(1.0, BORDER_COLOR);
+        visuals.widgets.noninteractive.fg_stroke = Stroke::new(1.0, PRIMARY_TEXT);
+        visuals.widgets.inactive.bg_fill = INPUT_BACKGROUND;
+        visuals.widgets.inactive.bg_stroke = Stroke::new(1.0, BORDER_COLOR);
+        visuals.widgets.inactive.fg_stroke = Stroke::new(1.0, PRIMARY_TEXT);
+        visuals.widgets.hovered.bg_fill = Color32::from_rgb(42, 42, 42);
+        visuals.widgets.hovered.bg_stroke = Stroke::new(1.0, Color32::from_rgb(70, 70, 70));
+        visuals.widgets.hovered.fg_stroke = Stroke::new(1.0, PRIMARY_TEXT);
+        visuals.widgets.active.bg_fill = Color32::from_rgb(48, 48, 48);
+        visuals.widgets.active.bg_stroke = Stroke::new(1.0, Color32::from_rgb(92, 92, 92));
+        visuals.widgets.active.fg_stroke = Stroke::new(1.0, PRIMARY_TEXT);
+        visuals.selection.bg_fill = Color32::from_rgb(84, 84, 84);
+        visuals.selection.stroke = Stroke::new(1.0, PRIMARY_TEXT);
+        visuals.hyperlink_color = PRIMARY_TEXT;
+
+        let spacing = ui.spacing_mut();
+        spacing.item_spacing = Vec2::new(12.0, 12.0);
+        spacing.button_padding = Vec2::new(20.0, 14.0);
+        spacing.interact_size.y = 48.0;
+        spacing.text_edit_width = 320.0;
+    }
+
+    fn sanitize_tin_input(tin_string: &mut String) {
+        let sanitized = tin_string
+            .chars()
+            .filter(char::is_ascii_digit)
+            .take(12)
+            .collect::<String>();
+
+        if sanitized != *tin_string {
+            *tin_string = sanitized;
+        }
+    }
+
+    fn is_valid_tin_input(tin_string: &str) -> bool {
+        matches!(tin_string.len(), 10 | 12) && tin_string.chars().all(|ch| ch.is_ascii_digit())
+    }
+
+    fn data_section<R>(
+        ui: &mut egui::Ui,
+        title: &str,
+        count: usize,
+        add_contents: impl FnOnce(&mut egui::Ui) -> R,
+    ) {
+        Frame::new()
+            .fill(SUBTLE_PANEL)
+            .stroke(Stroke::new(1.0, BORDER_COLOR))
+            .corner_radius(CornerRadius::same(16))
+            .inner_margin(Margin::same(18))
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        RichText::new(title)
+                            .size(ui.text_style_height(&TextStyle::Body) - 1.0)
+                            .color(MUTED_TEXT)
+                            .strong(),
+                    );
+                    ui.label(
+                        RichText::new(count.to_string())
+                            .size(ui.text_style_height(&TextStyle::Body) - 2.0)
+                            .color(MUTED_TEXT),
+                    );
+                });
+                ui.add_space(10.0);
+                add_contents(ui)
+            });
+    }
+
+    fn domain_chips(ui: &mut egui::Ui, items: &[String], empty_label: &str) {
+        if items.is_empty() {
+            ui.label(RichText::new(empty_label).color(MUTED_TEXT));
+            return;
+        }
+
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = Vec2::new(8.0, 8.0);
+
+            for item in items {
+                Frame::new()
+                    .fill(CHIP_BACKGROUND)
+                    .stroke(Stroke::new(1.0, CHIP_BORDER))
+                    .corner_radius(CornerRadius::same(255))
+                    .inner_margin(Margin::symmetric(12, 8))
+                    .show(ui, |ui| {
+                        ui.label(RichText::new(item).color(PRIMARY_TEXT));
+                    });
+            }
+        });
+    }
+
+    fn ip_list(ui: &mut egui::Ui, items: &[String], empty_label: &str) {
+        if items.is_empty() {
+            ui.label(RichText::new(empty_label).color(MUTED_TEXT));
+            return;
+        }
+
+        for (index, item) in items.iter().enumerate() {
+            Frame::new()
+                .fill(CARD_BACKGROUND)
+                .stroke(Stroke::new(1.0, BORDER_COLOR))
+                .corner_radius(CornerRadius::same(12))
+                .inner_margin(Margin::symmetric(14, 12))
+                .show(ui, |ui| {
+                    ui.label(RichText::new(item).color(PRIMARY_TEXT).monospace());
+                });
+
+            if index + 1 != items.len() {
+                ui.add_space(8.0);
+            }
+        }
+    }
+
     pub fn advance(&mut self) {
         match self {
             Self::Landing {
@@ -41,6 +178,8 @@ impl App {
                 error: error_string,
                 clicked,
             } => {
+                Self::sanitize_tin_input(tin_string);
+
                 if tin_string.trim().is_empty() {
                     *error_string = None;
                 } else {
@@ -108,7 +247,10 @@ impl App {
         }
     }
 
+    #[expect(clippy::too_many_lines)]
     pub fn main_ui(&mut self, ui: &mut egui::Ui) {
+        Self::apply_theme(ui);
+
         let body_text_size = ui.text_style_height(&TextStyle::Body);
         match self {
             Self::Landing {
@@ -116,33 +258,125 @@ impl App {
                 error: error_string,
                 clicked,
             } => {
+                let page_width = ui.available_width().min(980.0);
+                let top_padding = (ui.available_height() * 0.18).clamp(56.0, 180.0);
+
                 ui.vertical_centered(|ui| {
-                    ui.add_space(ui.available_height() * 0.2);
+                    ui.add_space(top_padding);
 
-                    let heading =
-                        RichText::from("Поиск и визуализация \n инфраструктуры компаний \n по ИНН")
-                            .size(body_text_size + 12.0)
-                            .strong();
-                    ui.label(heading);
+                    ui.allocate_ui_with_layout(
+                        Vec2::new(page_width, 0.0),
+                        Layout::top_down(Align::Min),
+                        |ui| {
+                            ui.label(
+                                RichText::new("InfraTrace")
+                                    .size(body_text_size - 1.0)
+                                    .color(MUTED_TEXT)
+                                    .strong(),
+                            );
 
-                    ui.label(
-                        "
-                        Введите ИНН, чтобы получить карточку компании, связанные
-                        домены и сетевую инфраструктуру в одном отчёте
-                        ",
+                            ui.add_space(12.0);
+                            ui.label(
+                                RichText::new("Поиск и визуализация\nинфраструктуры компаний\nпо ИНН")
+                                    .size(body_text_size + 24.0)
+                                    .color(PRIMARY_TEXT)
+                                    .strong(),
+                            );
+
+                            ui.add_space(14.0);
+                            ui.label(
+                                RichText::new(
+                                    "Введите ИНН, чтобы получить карточку компании, связанные домены и сетевую инфраструктуру в одном отчёте.",
+                                )
+                                .size(body_text_size + 3.0)
+                                .color(MUTED_TEXT),
+                            );
+
+                            ui.add_space(32.0);
+
+                            Frame::new()
+                                .fill(CARD_BACKGROUND)
+                                .stroke(Stroke::new(1.0, BORDER_COLOR))
+                                .corner_radius(CornerRadius::same(20))
+                                .inner_margin(Margin::same(24))
+                                .show(ui, |ui| {
+                                    let wide_layout = ui.available_width() >= 560.0;
+                                    let is_valid = Self::is_valid_tin_input(tin_string);
+
+                                    let submit_button = |enabled: bool| {
+                                        Button::new(
+                                            RichText::new("Найти")
+                                                .size(body_text_size + 2.0)
+                                                .color(if enabled { BUTTON_TEXT } else { PRIMARY_TEXT })
+                                                .strong(),
+                                        )
+                                        .fill(if enabled {
+                                            BUTTON_BACKGROUND
+                                        } else {
+                                            BUTTON_BACKGROUND_DISABLED
+                                        })
+                                        .stroke(Stroke::NONE)
+                                        .corner_radius(CornerRadius::same(12))
+                                        .min_size(Vec2::new(140.0, 54.0))
+                                    };
+
+                                    if wide_layout {
+                                        ui.horizontal(|ui| {
+                                            let input_width = (ui.available_width() - 152.0).max(220.0);
+                                            let input_response = ui.add_sized(
+                                                Vec2::new(input_width, 54.0),
+                                                TextEdit::singleline(tin_string)
+                                                    .hint_text("Введите ИНН")
+                                                    .font(TextStyle::Heading)
+                                                    .desired_width(f32::INFINITY),
+                                            );
+                                            let clicked_now = ui.add_enabled(is_valid, submit_button(is_valid)).clicked();
+                                            let enter_pressed = input_response.lost_focus()
+                                                && ui.input(|input| input.key_pressed(Key::Enter));
+
+                                            *clicked = clicked_now || (enter_pressed && is_valid);
+                                        });
+                                    } else {
+                                        let input_response = ui.add_sized(
+                                            Vec2::new(ui.available_width(), 54.0),
+                                            TextEdit::singleline(tin_string)
+                                                .hint_text("Введите ИНН")
+                                                .font(TextStyle::Heading)
+                                                .desired_width(f32::INFINITY),
+                                        );
+                                        let enter_pressed = input_response.lost_focus()
+                                            && ui.input(|input| input.key_pressed(Key::Enter));
+                                        let clicked_now = ui
+                                            .add_enabled_ui(is_valid, |ui| {
+                                                ui.add_sized(
+                                                    Vec2::new(ui.available_width(), 54.0),
+                                                    submit_button(is_valid),
+                                                )
+                                            })
+                                            .inner
+                                            .clicked();
+
+                                        *clicked = is_valid && (clicked_now || enter_pressed);
+                                    }
+
+                                    ui.add_space(6.0);
+                                    ui.label(
+                                        RichText::new("ИНН: 10 или 12 цифр")
+                                            .size(body_text_size - 1.0)
+                                            .color(MUTED_TEXT),
+                                    );
+
+                                    if let Some(error) = error_string {
+                                        ui.add_space(2.0);
+                                        ui.label(
+                                            RichText::new(error.as_str())
+                                                .size(body_text_size)
+                                                .color(ERROR_TEXT),
+                                        );
+                                    }
+                                });
+                        },
                     );
-
-                    let inn_edit_field = TextEdit::singleline(tin_string)
-                        .code_editor()
-                        .hint_text("ИНН")
-                        .desired_width(150.0);
-                    ui.add(inn_edit_field);
-
-                    *clicked = ui.button("Найти").clicked();
-
-                    if let Some(error) = error_string {
-                        ui.colored_label(ui.visuals().warn_fg_color, error);
-                    }
                 });
             }
 
@@ -152,36 +386,138 @@ impl App {
                 report_queried: _,
                 back_clicked,
             } => {
-                ui.horizontal(|ui| {
-                    if report.is_none() {
-                        ui.spinner();
-                    }
+                let page_width = ui.available_width().min(980.0);
 
-                    ui.strong(format!("Поиск по ИНН: {tin}"));
+                ui.vertical_centered(|ui| {
+                    ui.add_space(40.0);
 
-                    if report.is_some() {
-                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                            *back_clicked = ui.button("Назад").clicked();
+                    Frame::new()
+                        .fill(CARD_BACKGROUND)
+                        .stroke(Stroke::new(1.0, BORDER_COLOR))
+                        .corner_radius(CornerRadius::same(20))
+                        .inner_margin(Margin::same(24))
+                        .show(ui, |ui| {
+                            ui.set_max_width(page_width);
+
+                            ui.horizontal(|ui| {
+                                if report.is_none() {
+                                    ui.spinner();
+                                    ui.label(
+                                        RichText::new(format!("Ищем инфраструктуру по ИНН {tin}"))
+                                            .size(body_text_size)
+                                            .color(MUTED_TEXT),
+                                    );
+                                } else {
+                                    ui.label(
+                                        RichText::new(format!("Отчёт по ИНН {tin}"))
+                                            .size(body_text_size)
+                                            .color(MUTED_TEXT),
+                                    );
+                                }
+                            });
+
+                            ui.add_space(20.0);
+
+                            if let Some(TINReport {
+                                tin: _,
+                                name,
+                                domains,
+                                ip_addrs,
+                            }) = report
+                            {
+                                let mut domain_list = domains.iter().cloned().collect::<Vec<_>>();
+                                domain_list.sort_unstable();
+
+                                let mut ip_list =
+                                    ip_addrs.iter().map(ToString::to_string).collect::<Vec<_>>();
+                                ip_list.sort_unstable();
+
+                                ui.vertical(|ui| {
+                                    ui.horizontal(|ui| {
+                                        ui.vertical(|ui| {
+                                            ui.label(
+                                                RichText::new(name.as_str())
+                                                    .size(body_text_size + 14.0)
+                                                    .strong()
+                                                    .color(PRIMARY_TEXT),
+                                            );
+                                            ui.add_space(4.0);
+                                            ui.label(
+                                                RichText::new(format!("ИНН {tin}"))
+                                                    .size(body_text_size + 1.0)
+                                                    .color(MUTED_TEXT),
+                                            );
+                                        });
+
+                                        ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
+                                            *back_clicked = ui
+                                                .add(
+                                                    Button::new(RichText::new("Назад").strong())
+                                                        .corner_radius(CornerRadius::same(10)),
+                                                )
+                                                .clicked();
+                                        });
+                                    });
+
+                                    ui.add_space(24.0);
+
+                                    let wide_layout = ui.available_width() >= 760.0;
+
+                                    if wide_layout {
+                                        ui.columns(2, |columns| {
+                                            Self::data_section(
+                                                &mut columns[0],
+                                                "Домены",
+                                                domain_list.len(),
+                                                |ui| {
+                                                    Self::domain_chips(
+                                                        ui,
+                                                        &domain_list,
+                                                        "Домены не найдены",
+                                                    );
+                                                },
+                                            );
+
+                                            Self::data_section(
+                                                &mut columns[1],
+                                                "IP-адреса",
+                                                ip_list.len(),
+                                                |ui| {
+                                                    Self::ip_list(
+                                                        ui,
+                                                        &ip_list,
+                                                        "IP-адреса не найдены",
+                                                    );
+                                                },
+                                            );
+                                        });
+                                    } else {
+                                        Self::data_section(
+                                            ui,
+                                            "Домены",
+                                            domain_list.len(),
+                                            |ui| {
+                                                Self::domain_chips(
+                                                    ui,
+                                                    &domain_list,
+                                                    "Домены не найдены",
+                                                );
+                                            },
+                                        );
+
+                                        Self::data_section(
+                                            ui,
+                                            "IP-адреса",
+                                            ip_list.len(),
+                                            |ui| {
+                                                Self::ip_list(ui, &ip_list, "IP-адреса не найдены");
+                                            },
+                                        );
+                                    }
+                                });
+                            }
                         });
-                    }
                 });
-
-                if let Some(report) = report {
-                    ui.strong(RichText::from(&report.name).size(body_text_size + 8.0));
-                    ScrollArea::vertical().show(ui, |ui| {
-                        ui.strong("Обнаруженные домены и поддомены:");
-                        for domain in &report.domains {
-                            ui.monospace(domain);
-                        }
-
-                        ui.strong("IP-адреса");
-                        for ip_addr in &report.ip_addrs {
-                            ui.monospace(ip_addr.to_string());
-                        }
-
-                        ui.allocate_space(egui::vec2(ui.available_width(), 0.0));
-                    });
-                }
             }
         }
     }
@@ -191,8 +527,8 @@ impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.advance();
 
-        ui.set_zoom_factor(1.5);
-
-        egui::CentralPanel::default().show_inside(ui, |ui| self.main_ui(ui));
+        egui::CentralPanel::default()
+            .frame(Frame::new().fill(PAGE_BACKGROUND))
+            .show_inside(ui, |ui| self.main_ui(ui));
     }
 }
