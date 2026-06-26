@@ -21,6 +21,7 @@ use tempfile::NamedTempFile;
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
+use tower_http::services::ServeDir;
 
 use crate::cache::{Cache, SUBDIR_DOMAIN, SUBDIR_EGR, SUBDIR_IP_ADDR};
 use crate::state::ServerState;
@@ -85,6 +86,7 @@ pub fn router() -> std::io::Result<Router> {
     };
 
     let router = Router::new()
+        .nest_service("/pdf", ServeDir::new("cache/report"))
         .route("/egr/{tin}", get(endpoint_egr))
         .route("/domain/{tin}", get(endpoint_domain))
         .route("/ip/{tin}", get(endpoint_ip))
