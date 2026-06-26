@@ -3,6 +3,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 pub const SUBDIR_EGR: &str = "egr";
+pub const SUBDIR_DOMAIN: &str = "domain";
+pub const SUBDIR_IP_ADDR: &str = "ip";
 
 #[derive(Debug)]
 #[must_use]
