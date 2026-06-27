@@ -521,6 +521,15 @@ impl App {
 
                         ui.add_space(16.0);
                         Self::report_contents(ui, report, body_text_size);
+                        ui.add_space(14.0);
+                        if ui
+                            .add(Self::primary_button("Скачать PDF", true, body_text_size))
+                            .clicked()
+                        {
+                            ui.ctx().open_url(egui::OpenUrl::new_tab(format!(
+                                "http://localhost:8080/pdf/{tin}.pdf"
+                            )));
+                        }
                         ui.add_space(28.0);
                     });
                 });
