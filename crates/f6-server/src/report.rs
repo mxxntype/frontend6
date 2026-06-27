@@ -31,5 +31,6 @@ pub async fn build(
         name: legal_entity.short_name,
         domains,
         ip_addrs,
+        infrastructure_groups: Vec::new(),
     }
 }

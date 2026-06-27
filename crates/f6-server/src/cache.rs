@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 pub const SUBDIR_EGR: &str = "egr";
 pub const SUBDIR_DOMAIN: &str = "domain";
 pub const SUBDIR_IP_ADDR: &str = "ip";
+pub const SUBDIR_INFRA: &str = "infra";
 
 #[derive(Debug)]
 #[must_use]
@@ -21,6 +22,7 @@ where
 {
     pub fn new(path: &Path) -> std::io::Result<Self> {
         let path = std::env::current_dir()?.join("cache").join(path);
+        std::fs::create_dir_all(&path)?;
         tracing::debug!(
             "Creating Cache<{i}, {t}> in {path}",
             i = std::any::type_name::<I>(),

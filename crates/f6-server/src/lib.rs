@@ -22,11 +22,12 @@ use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
-use crate::cache::{Cache, SUBDIR_DOMAIN, SUBDIR_EGR, SUBDIR_IP_ADDR};
+use crate::cache::{Cache, SUBDIR_DOMAIN, SUBDIR_EGR, SUBDIR_INFRA, SUBDIR_IP_ADDR};
 use crate::state::ServerState;
 
 pub mod cache;
 pub mod fns_api;
+pub mod infra;
 pub mod report;
 pub mod state;
 
@@ -76,12 +77,14 @@ pub fn router() -> std::io::Result<Router> {
     let cache_egr = Arc::new(Mutex::new(Cache::new(&PathBuf::from(SUBDIR_EGR))?));
     let cache_domain = Arc::new(Mutex::new(Cache::new(&PathBuf::from(SUBDIR_DOMAIN))?));
     let cache_ip = Arc::new(Mutex::new(Cache::new(&PathBuf::from(SUBDIR_IP_ADDR))?));
+    let cache_infra = Arc::new(Mutex::new(Cache::new(&PathBuf::from(SUBDIR_INFRA))?));
 
     let state = ServerState {
         fns_api_key: fns_api_key.trim().to_owned(),
         cache_egr,
         cache_domain,
         cache_ip,
+        cache_infra,
     };
 
     let router = Router::new()
@@ -258,12 +261,40 @@ async fn endpoint_report(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let Json(ip_addr_response) = self::endpoint_ip(State(state), Path(tin))
+    let Json(ip_addr_response) = self::endpoint_ip(State(state.clone()), Path(tin))
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let egr_response = egr.items[0].clone();
-    let report = self::report::build(tin, egr_response, domain_response, ip_addr_response).await;
+    let mut report =
+        self::report::build(tin, egr_response, domain_response, ip_addr_response).await;
+
+    report.infrastructure_groups = if let Some(infrastructure_groups) = state
+        .cache_infra
+        .lock()
+        .await
+        .retrieve(&tin)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    {
+        infrastructure_groups
+    } else {
+        tracing::warn!(
+            "Infrastructure groups for this TIN have not been cached, querying RIPEstat"
+        );
+        let infrastructure_groups =
+            self::infra::enrich(&report.ip_addrs, &report.name, &report.domains).await;
+
+        state
+            .cache_infra
+            .lock()
+            .await
+            .persist(&tin, &infrastructure_groups)
+            .await
+            .unwrap();
+
+        infrastructure_groups
+    };
 
     Ok(Json(report))
 }
