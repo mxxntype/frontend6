@@ -24,6 +24,7 @@ const ERROR_TEXT: Color32 = Color32::from_rgb(255, 126, 126);
 const OWN_BADGE: Color32 = Color32::from_rgb(34, 84, 61);
 const HOSTING_BADGE: Color32 = Color32::from_rgb(49, 63, 111);
 const UNKNOWN_BADGE: Color32 = Color32::from_rgb(71, 71, 71);
+const PAGE_MAX_WIDTH: f32 = 1040.0;
 
 #[derive(Debug)]
 #[must_use]
@@ -156,7 +157,22 @@ impl App {
             .corner_radius(CornerRadius::same(255))
             .inner_margin(Margin::symmetric(10, 6))
             .show(ui, |ui| {
+                if monospace {
+                    ui.set_min_width(112.0);
+                }
                 ui.label(rich_text);
+            });
+    }
+
+    fn domain_row(ui: &mut egui::Ui, domain: &str) {
+        Frame::new()
+            .fill(CHIP_BACKGROUND)
+            .stroke(Stroke::new(1.0, CHIP_BORDER))
+            .corner_radius(CornerRadius::same(10))
+            .inner_margin(Margin::symmetric(12, 8))
+            .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.label(RichText::new(domain).color(PRIMARY_TEXT));
             });
     }
 
@@ -195,6 +211,7 @@ impl App {
 
     fn stat_card(ui: &mut egui::Ui, label: &str, value: impl ToString, body_text_size: f32) {
         Self::subtle_frame().show(ui, |ui| {
+            ui.set_width(ui.available_width());
             ui.label(
                 RichText::new(value.to_string())
                     .size(body_text_size + 12.0)
@@ -226,7 +243,8 @@ impl App {
         group: &InfrastructureGroup,
         body_text_size: f32,
     ) {
-        Self::section_frame().show(ui, |ui| {
+        Self::subtle_frame().show(ui, |ui| {
+            ui.set_width(ui.available_width());
             ui.horizontal_wrapped(|ui| {
                 let title = match (group.asn, group.prefix.as_deref()) {
                     (Some(asn), Some(prefix)) => format!("AS{asn} / {prefix}"),
@@ -274,6 +292,7 @@ impl App {
 
     fn domain_section(ui: &mut egui::Ui, domains: &[String], body_text_size: f32) {
         Self::section_frame().show(ui, |ui| {
+            ui.set_width(ui.available_width());
             Self::section_header(ui, "Домены", domains.len(), body_text_size);
             ui.add_space(10.0);
 
@@ -282,17 +301,18 @@ impl App {
                 return;
             }
 
-            ui.horizontal_wrapped(|ui| {
-                ui.spacing_mut().item_spacing = Vec2::new(8.0, 8.0);
-                for domain in domains {
-                    Self::chip(ui, domain, PRIMARY_TEXT, false);
+            for (index, domain) in domains.iter().enumerate() {
+                Self::domain_row(ui, domain);
+                if index + 1 != domains.len() {
+                    ui.add_space(8.0);
                 }
-            });
+            }
         });
     }
 
     fn ip_section(ui: &mut egui::Ui, ip_addrs: &[IpAddr], body_text_size: f32) {
         Self::section_frame().show(ui, |ui| {
+            ui.set_width(ui.available_width());
             Self::section_header(ui, "Все найденные IP", ip_addrs.len(), body_text_size);
             ui.add_space(10.0);
 
@@ -363,7 +383,10 @@ impl App {
                                     .desired_width(f32::INFINITY),
                             );
                             let clicked_now = ui
-                                .add_enabled(is_valid, Self::primary_button("Найти", is_valid, body_text_size))
+                                .add_enabled(
+                                    is_valid,
+                                    Self::primary_button("Найти", is_valid, body_text_size),
+                                )
                                 .clicked();
                             let enter_pressed = input_response.lost_focus()
                                 && ui.input(|input| input.key_pressed(Key::Enter));
@@ -402,7 +425,11 @@ impl App {
 
                     if let Some(error) = error_string {
                         ui.add_space(2.0);
-                        ui.label(RichText::new(error.as_str()).size(body_text_size).color(ERROR_TEXT));
+                        ui.label(
+                            RichText::new(error.as_str())
+                                .size(body_text_size)
+                                .color(ERROR_TEXT),
+                        );
                     }
                 });
             });
@@ -417,22 +444,33 @@ impl App {
         back_clicked: &mut bool,
         body_text_size: f32,
     ) {
-        let page_width = ui.available_width().min(1040.0);
+        ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                ui.add_space(28.0);
+                ui.vertical_centered(|ui| {
+                    ui.set_max_width(PAGE_MAX_WIDTH);
 
-        ui.vertical_centered(|ui| {
-            ui.add_space(34.0);
-            ui.allocate_ui_with_layout(Vec2::new(page_width, 0.0), Layout::top_down(Align::Min), |ui| {
-                Self::card_frame().show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.vertical(|ui| {
+                    ui.with_layout(Layout::top_down(Align::Min), |ui| {
+                        ui.set_width(ui.available_width().min(PAGE_MAX_WIDTH));
+
+                        *back_clicked = ui
+                            .add(
+                                Button::new(RichText::new("Назад").strong())
+                                    .corner_radius(CornerRadius::same(8)),
+                            )
+                            .clicked();
+
+                        ui.add_space(12.0);
+                        Self::card_frame().show(ui, |ui| {
+                            ui.set_width(ui.available_width());
                             ui.label(
                                 RichText::new(format!("Отчёт по ИНН {tin}"))
                                     .size(body_text_size - 1.0)
                                     .color(MUTED_TEXT),
                             );
 
-                            let title = report
-                                .map_or("Загрузка отчёта", |report| report.name.as_str());
+                            let title = report.map_or("Загрузка отчёта", |report| report.name.as_str());
                             ui.label(
                                 RichText::new(title)
                                     .size(body_text_size + 14.0)
@@ -441,56 +479,52 @@ impl App {
                             );
                         });
 
-                        ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
-                            *back_clicked = ui
-                                .add(Button::new(RichText::new("Назад").strong()).corner_radius(CornerRadius::same(8)))
-                                .clicked();
-                        });
-                    });
+                        if let Some(error) = error {
+                            ui.add_space(16.0);
+                            Self::subtle_frame().show(ui, |ui| {
+                                ui.set_width(ui.available_width());
+                                ui.label(
+                                    RichText::new("Не удалось получить отчёт")
+                                        .size(body_text_size + 3.0)
+                                        .strong()
+                                        .color(ERROR_TEXT),
+                                );
+                                ui.label(RichText::new(error).color(MUTED_TEXT));
+                            });
+                            return;
+                        }
 
-                    if let Some(error) = error {
-                        ui.add_space(22.0);
-                        Self::subtle_frame().show(ui, |ui| {
-                            ui.label(
-                                RichText::new("Не удалось получить отчёт")
-                                    .size(body_text_size + 3.0)
-                                    .strong()
-                                    .color(ERROR_TEXT),
-                            );
-                            ui.label(RichText::new(error).color(MUTED_TEXT));
-                        });
-                        return;
-                    }
-
-                    let Some(report) = report else {
-                        ui.add_space(22.0);
-                        Self::subtle_frame().show(ui, |ui| {
-                            ui.horizontal(|ui| {
-                                ui.spinner();
-                                ui.vertical(|ui| {
-                                    ui.label(
-                                        RichText::new("Ищем инфраструктуру")
-                                            .size(body_text_size + 3.0)
-                                            .strong()
-                                            .color(PRIMARY_TEXT),
-                                    );
-                                    ui.label(
-                                        RichText::new(
-                                            "Получаем домены, резолвим IP и группируем сети через RIPEstat.",
-                                        )
-                                        .color(MUTED_TEXT),
-                                    );
+                        let Some(report) = report else {
+                            ui.add_space(16.0);
+                            Self::subtle_frame().show(ui, |ui| {
+                                ui.set_width(ui.available_width());
+                                ui.horizontal(|ui| {
+                                    ui.spinner();
+                                    ui.vertical(|ui| {
+                                        ui.label(
+                                            RichText::new("Ищем инфраструктуру")
+                                                .size(body_text_size + 3.0)
+                                                .strong()
+                                                .color(PRIMARY_TEXT),
+                                        );
+                                        ui.label(
+                                            RichText::new(
+                                                "Получаем домены, резолвим IP и группируем сети через RIPEstat.",
+                                            )
+                                            .color(MUTED_TEXT),
+                                        );
+                                    });
                                 });
                             });
-                        });
-                        return;
-                    };
+                            return;
+                        };
 
-                    ui.add_space(22.0);
-                    Self::report_contents(ui, report, body_text_size);
+                        ui.add_space(16.0);
+                        Self::report_contents(ui, report, body_text_size);
+                        ui.add_space(28.0);
+                    });
                 });
             });
-        });
     }
 
     fn report_contents(ui: &mut egui::Ui, report: &TINReport, body_text_size: f32) {
@@ -518,68 +552,38 @@ impl App {
             .filter(|group| group.kind == InfrastructureKind::Unknown)
             .count();
 
-        if ui.available_width() >= 760.0 {
-            ui.columns(4, |columns| {
-                Self::stat_card(&mut columns[0], "Домены", domains.len(), body_text_size);
-                Self::stat_card(&mut columns[1], "IP-адреса", ip_addrs.len(), body_text_size);
-                Self::stat_card(&mut columns[2], "Группы", groups.len(), body_text_size);
-                Self::stat_card(
-                    &mut columns[3],
-                    "Own / Hosting / Unknown",
-                    format!("{own_count} / {hosting_count} / {unknown_count}"),
-                    body_text_size,
-                );
-            });
-        } else {
-            Self::stat_card(ui, "Домены", domains.len(), body_text_size);
-            Self::stat_card(ui, "IP-адреса", ip_addrs.len(), body_text_size);
-            Self::stat_card(ui, "Группы", groups.len(), body_text_size);
-            Self::stat_card(
-                ui,
-                "Own / Hosting / Unknown",
-                format!("{own_count} / {hosting_count} / {unknown_count}"),
-                body_text_size,
-            );
-        }
+        let summary_label = "Хостинги / Собственные / Неизвестно";
+        let summary_value = format!("{hosting_count} / {own_count} / {unknown_count}");
+
+        Self::stat_card(ui, "Домены", domains.len(), body_text_size);
+        Self::stat_card(ui, "IP-адреса", ip_addrs.len(), body_text_size);
+        Self::stat_card(ui, "Группы", groups.len(), body_text_size);
+        Self::stat_card(ui, summary_label, summary_value.as_str(), body_text_size);
 
         ui.add_space(18.0);
-        ScrollArea::vertical()
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
-                Self::section_frame().show(ui, |ui| {
-                    Self::section_header(ui, "Инфраструктура", groups.len(), body_text_size);
-                    ui.add_space(10.0);
+        Self::section_frame().show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            Self::section_header(ui, "Инфраструктура", groups.len(), body_text_size);
+            ui.add_space(10.0);
 
-                    if groups.is_empty() {
-                        ui.label(
-                            RichText::new("Не удалось сгруппировать IP-инфраструктуру")
-                                .color(MUTED_TEXT),
-                        );
-                    } else {
-                        for (index, group) in groups.iter().enumerate() {
-                            Self::infrastructure_group_card(ui, group, body_text_size);
-                            if index + 1 != groups.len() {
-                                ui.add_space(10.0);
-                            }
-                        }
+            if groups.is_empty() {
+                ui.label(
+                    RichText::new("Не удалось сгруппировать IP-инфраструктуру").color(MUTED_TEXT),
+                );
+            } else {
+                for (index, group) in groups.iter().enumerate() {
+                    Self::infrastructure_group_card(ui, group, body_text_size);
+                    if index + 1 != groups.len() {
+                        ui.add_space(10.0);
                     }
-                });
-
-                ui.add_space(14.0);
-                let wide_layout = ui.available_width() >= 760.0;
-                if wide_layout {
-                    ui.columns(2, |columns| {
-                        Self::domain_section(&mut columns[0], &domains, body_text_size);
-                        Self::ip_section(&mut columns[1], &ip_addrs, body_text_size);
-                    });
-                } else {
-                    Self::domain_section(ui, &domains, body_text_size);
-                    ui.add_space(14.0);
-                    Self::ip_section(ui, &ip_addrs, body_text_size);
                 }
+            }
+        });
 
-                ui.allocate_space(Vec2::new(ui.available_width(), 8.0));
-            });
+        ui.add_space(14.0);
+        Self::domain_section(ui, &domains, body_text_size);
+        ui.add_space(14.0);
+        Self::ip_section(ui, &ip_addrs, body_text_size);
     }
 
     pub fn advance(&mut self) {

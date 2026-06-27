@@ -23,6 +23,7 @@ use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use tower_http::cors::{Any, CorsLayer};
+use tower_http::services::ServeDir;
 
 use crate::cache::{Cache, SUBDIR_DOMAIN, SUBDIR_EGR, SUBDIR_INFRA, SUBDIR_IP_ADDR};
 use crate::state::ServerState;
@@ -80,6 +81,7 @@ pub fn router() -> std::io::Result<Router> {
     let cache_domain = Arc::new(Mutex::new(Cache::new(&PathBuf::from(SUBDIR_DOMAIN))?));
     let cache_ip = Arc::new(Mutex::new(Cache::new(&PathBuf::from(SUBDIR_IP_ADDR))?));
     let cache_infra = Arc::new(Mutex::new(Cache::new(&PathBuf::from(SUBDIR_INFRA))?));
+    std::fs::create_dir_all("cache/report")?;
 
     let state = ServerState {
         fns_api_key: fns_api_key.trim().to_owned(),
@@ -95,6 +97,7 @@ pub fn router() -> std::io::Result<Router> {
         .allow_headers(Any);
 
     let router = Router::new()
+        .nest_service("/pdf", ServeDir::new("cache/report"))
         .route("/egr/{tin}", get(endpoint_egr))
         .route("/domain/{tin}", get(endpoint_domain))
         .route("/ip/{tin}", get(endpoint_ip))
@@ -303,6 +306,8 @@ async fn endpoint_report(
 
         infrastructure_groups
     };
+
+    self::report::build_pdf(&report);
 
     Ok(Json(report))
 }

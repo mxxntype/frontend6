@@ -57,6 +57,7 @@
               perl
               cmake
               trunk
+              typst
               whois
 
               (python3.withPackages (python-pkgs: with python-pkgs; [
