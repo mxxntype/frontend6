@@ -136,7 +136,8 @@
   <!-- Force refresh (Ctrl + F5) to load the latest files instead of cached files  -->
   <script>
     // We disable caching during development so that we always view the latest version.
-    if ('serviceWorker' in navigator && window.location.hash !== "#dev") {
+    const isLocalhost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+    if ('serviceWorker' in navigator && window.location.hash !== "#dev" && !isLocalhost) {
       window.addEventListener('load', function () {
         navigator.serviceWorker.register('sw.js');
       });

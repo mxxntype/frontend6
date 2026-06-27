@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::extract::{Path, State};
+use axum::http::{HeaderValue, Method};
 use axum::routing::get;
 use axum::{Json, Router};
 use clap::Parser;
@@ -21,6 +22,7 @@ use tempfile::NamedTempFile;
 use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
+use tower_http::cors::{Any, CorsLayer};
 
 use crate::cache::{Cache, SUBDIR_DOMAIN, SUBDIR_EGR, SUBDIR_INFRA, SUBDIR_IP_ADDR};
 use crate::state::ServerState;
@@ -87,13 +89,19 @@ pub fn router() -> std::io::Result<Router> {
         cache_infra,
     };
 
+    let cors = CorsLayer::new()
+        .allow_origin(HeaderValue::from_static("http://localhost:8081"))
+        .allow_methods([Method::GET])
+        .allow_headers(Any);
+
     let router = Router::new()
         .route("/egr/{tin}", get(endpoint_egr))
         .route("/domain/{tin}", get(endpoint_domain))
         .route("/ip/{tin}", get(endpoint_ip))
         .route("/report/{tin}", get(endpoint_report))
         .route("/", get(|| async { "Hello, World!" }))
-        .with_state(state);
+        .with_state(state)
+        .layer(cors);
 
     Ok(router)
 }
