@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 pub const SUBDIR_EGR: &str = "egr";
 pub const SUBDIR_DOMAIN: &str = "domain";
 pub const SUBDIR_IP_ADDR: &str = "ip";
+pub const SUBDIR_AS_INFO: &str = "as";
 
 #[derive(Debug)]
 #[must_use]

@@ -1,5 +1,6 @@
 use nutype::nutype;
 
+pub mod as_info;
 pub mod domain;
 pub mod fns;
 pub mod ip_addr;

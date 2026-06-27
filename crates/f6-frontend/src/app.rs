@@ -168,15 +168,32 @@ impl App {
 
                 if let Some(report) = report {
                     ui.strong(RichText::from(&report.name).size(body_text_size + 8.0));
+
+                    ui.hyperlink_to(
+                        "Отчёт в формате PDF",
+                        format!("http://localhost:8080/pdf/{tin}.pdf"),
+                    );
+
+                    ui.separator();
+
                     ScrollArea::vertical().show(ui, |ui| {
                         ui.strong("Обнаруженные домены и поддомены:");
-                        for domain in &report.domains {
-                            ui.monospace(domain);
+
+                        for (domain, ip_addr) in &report.ip_addrs {
+                            ui.monospace(format!("{domain} ({ip_addr})"));
                         }
 
-                        ui.strong("IP-адреса");
-                        for ip_addr in &report.ip_addrs {
-                            ui.monospace(ip_addr.to_string());
+                        for (asn, as_info) in &report.ripe_info {
+                            let holder = as_info
+                                .holder
+                                .as_ref()
+                                .map_or("неизвестен", |holder| holder.as_str());
+
+                            ui.separator();
+                            ui.strong(format!("AS {asn} (владелец: {holder})"));
+                            for (domain, ip_addr) in &as_info.domains {
+                                ui.monospace(format!("{domain} ({ip_addr})"));
+                            }
                         }
 
                         ui.allocate_space(egui::vec2(ui.available_width(), 0.0));

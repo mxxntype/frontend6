@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -8,6 +8,7 @@ use axum::routing::get;
 use axum::{Json, Router};
 use clap::Parser;
 use f6_types::LegalEntityTIN;
+use f6_types::as_info::ASInfo;
 use f6_types::domain::DomainResponse;
 use f6_types::fns::EgrResponse;
 use f6_types::ip_addr::IpAddrResponse;
@@ -23,13 +24,14 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use tower_http::services::ServeDir;
 
-use crate::cache::{Cache, SUBDIR_DOMAIN, SUBDIR_EGR, SUBDIR_IP_ADDR};
-use crate::state::ServerState;
-
 pub mod cache;
 pub mod fns_api;
 pub mod report;
+pub mod ripe;
 pub mod state;
+
+use crate::cache::{Cache, SUBDIR_AS_INFO, SUBDIR_DOMAIN, SUBDIR_EGR, SUBDIR_IP_ADDR};
+use crate::state::ServerState;
 
 pub const DEFAULT_LISTEN_PORT: u16 = 8080;
 pub const DEFAULT_LISTEN_ADDR: SocketAddrV4 =
@@ -77,12 +79,14 @@ pub fn router() -> std::io::Result<Router> {
     let cache_egr = Arc::new(Mutex::new(Cache::new(&PathBuf::from(SUBDIR_EGR))?));
     let cache_domain = Arc::new(Mutex::new(Cache::new(&PathBuf::from(SUBDIR_DOMAIN))?));
     let cache_ip = Arc::new(Mutex::new(Cache::new(&PathBuf::from(SUBDIR_IP_ADDR))?));
+    let cache_as_info = Arc::new(Mutex::new(Cache::new(&PathBuf::from(SUBDIR_AS_INFO))?));
 
     let state = ServerState {
         fns_api_key: fns_api_key.trim().to_owned(),
         cache_egr,
         cache_domain,
         cache_ip,
+        cache_as_info,
     };
 
     let router = Router::new()
@@ -90,8 +94,8 @@ pub fn router() -> std::io::Result<Router> {
         .route("/egr/{tin}", get(endpoint_egr))
         .route("/domain/{tin}", get(endpoint_domain))
         .route("/ip/{tin}", get(endpoint_ip))
+        .route("/ripe/{tin}", get(endpoint_ripe))
         .route("/report/{tin}", get(endpoint_report))
-        .route("/", get(|| async { "Hello, World!" }))
         .with_state(state);
 
     Ok(router)
@@ -200,7 +204,7 @@ async fn endpoint_ip(
     State(state): State<ServerState>,
     Path(tin): Path<LegalEntityTIN>,
 ) -> Result<Json<IpAddrResponse>, StatusCode> {
-    if let Some(ip) = state
+    if let Some(ip_response) = state
         .cache_ip
         .lock()
         .await
@@ -208,12 +212,12 @@ async fn endpoint_ip(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     {
-        return Ok(Json(ip));
+        return Ok(Json(ip_response));
     }
 
     tracing::warn!("IPs for this TIN have not been cached, resolving");
 
-    let Json(domain) = self::endpoint_domain(State(state.clone()), Path(tin))
+    let Json(DomainResponse(domains)) = self::endpoint_domain(State(state.clone()), Path(tin))
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -224,26 +228,61 @@ async fn endpoint_ip(
     .build()
     .unwrap();
 
-    let mut ip = HashSet::new();
-    for domain in &domain.0 {
+    let mut ip_domain_map = HashMap::new();
+    for domain in domains {
         if let Ok(lookup) = resolver.lookup_ip(domain.trim_matches('/')).await {
             for ip_addr in lookup.iter() {
-                ip.insert(ip_addr);
+                ip_domain_map.insert(domain.clone(), ip_addr);
             }
         }
     }
 
-    let ip = IpAddrResponse(ip);
+    let ip_response = IpAddrResponse(ip_domain_map);
 
     state
         .cache_ip
         .lock()
         .await
-        .persist(&tin, &ip)
+        .persist(&tin, &ip_response)
         .await
         .unwrap();
 
-    Ok(Json(ip))
+    Ok(Json(ip_response))
+}
+
+#[tracing::instrument(skip_all)]
+#[axum::debug_handler]
+async fn endpoint_ripe(
+    State(state): State<ServerState>,
+    Path(tin): Path<LegalEntityTIN>,
+) -> Result<Json<HashMap<u64, ASInfo>>, StatusCode> {
+    if let Some(as_info_map) = state
+        .cache_as_info
+        .lock()
+        .await
+        .retrieve(&tin)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    {
+        return Ok(Json(as_info_map));
+    }
+
+    tracing::warn!("ASInfo for this TIN has not been cached, querying RIPE");
+
+    let Json(IpAddrResponse(ip_domain_map)) = self::endpoint_ip(State(state.clone()), Path(tin))
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let as_info_map = ripe::group_as_info(ip_domain_map.into_iter().collect()).await;
+    state
+        .cache_as_info
+        .lock()
+        .await
+        .persist(&tin, &as_info_map)
+        .await
+        .unwrap();
+
+    Ok(Json(as_info_map))
 }
 
 #[tracing::instrument(skip_all)]
@@ -260,12 +299,23 @@ async fn endpoint_report(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let Json(ip_addr_response) = self::endpoint_ip(State(state), Path(tin))
+    let Json(ip_addr_response) = self::endpoint_ip(State(state.clone()), Path(tin))
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let Json(ripe_info) = self::endpoint_ripe(State(state), Path(tin))
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let egr_response = egr.items[0].clone();
-    let report = self::report::build(tin, egr_response, domain_response, ip_addr_response).await;
+    let report = self::report::build(
+        tin,
+        egr_response,
+        domain_response,
+        ip_addr_response,
+        ripe_info,
+    )
+    .await;
 
     Ok(Json(report))
 }

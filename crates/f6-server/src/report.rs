@@ -1,19 +1,22 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::fmt::Write;
 
 use f6_types::LegalEntityTIN;
+use f6_types::as_info::ASInfo;
 use f6_types::domain::DomainResponse;
 use f6_types::fns::EgrResponseItem;
 use f6_types::ip_addr::IpAddrResponse;
 use f6_types::report::TINReport;
-use itertools::Itertools;
 use tempfile::NamedTempFile;
 
 #[tracing::instrument(skip_all, fields(%tin))]
+#[expect(clippy::implicit_hasher, reason = "who gives a shit")]
 pub async fn build(
     tin: LegalEntityTIN,
     egr_response: EgrResponseItem,
     DomainResponse(sublist3r_domains): DomainResponse,
     IpAddrResponse(ip_addrs): IpAddrResponse,
+    ripe_info: HashMap<u64, ASInfo>,
 ) -> TINReport {
     let legal_entity = egr_response.legal_entity;
 
@@ -33,6 +36,7 @@ pub async fn build(
         name: legal_entity.short_name,
         domains,
         ip_addrs,
+        ripe_info,
     };
 
     self::build_pdf(&report);
@@ -45,29 +49,33 @@ pub fn build_pdf(
     TINReport {
         tin,
         name,
-        domains,
+        domains: _,
         ip_addrs,
+        ripe_info,
     }: &TINReport,
 ) {
-    let typst_source = format!(
+    let mut typst_source = format!(
         "
 = Отчёт о сканировании ИНН {tin}
 
 Организация: *{name}*
 
-== Обнаруженные домены и поддомены:
-{domains}
+= Обнаруженные домены и поддомены:
 
-== IP-адреса:
-
-{ips}
 ",
-        domains = domains
-            .iter()
-            .map(|domain| format!("\n - `{domain}`"))
-            .join(""),
-        ips = ip_addrs.iter().map(|ip| format!("\n - `{ip}`")).join(""),
     );
+
+    for (domain, ip) in ip_addrs {
+        writeln!(typst_source, "- `{domain} ({ip})`").unwrap();
+    }
+
+    for (asn, as_info) in ripe_info {
+        let holder = as_info.holder.as_ref().map_or("неизвестен", |v| v.as_str());
+        writeln!(typst_source, "= AS {asn} (владелец: {holder}) ").unwrap();
+        for (domain, ip) in &as_info.domains {
+            writeln!(typst_source, "- `{domain} ({ip})`").unwrap();
+        }
+    }
 
     let temp_file = NamedTempFile::new().unwrap();
     std::fs::write(temp_file.path(), typst_source).unwrap();
